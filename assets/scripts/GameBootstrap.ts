@@ -22,45 +22,48 @@ export class GameBootstrap extends Component {
     }
 
     private createGameNodes(): void {
-        // 创建游戏画板节点
+        // 创建游戏画板节点 - 放在屏幕左侧偏左位置
         const gameBoardNode = new Node('GameBoard');
         this.node.addChild(gameBoardNode);
         gameBoardNode.layer = Layers.Enum.UI_2D;
+        gameBoardNode.setPosition(new Vec3(-200, 0, 0));  // 向左移动，避免遮挡文字
         const boardTransform = gameBoardNode.addComponent(UITransform);
-        boardTransform.setContentSize(600, 600);
-        gameBoardNode.addComponent(Graphics);
+        boardTransform.setContentSize(500, 700);  // 增大尺寸
+        const boardGraphics = gameBoardNode.addComponent(Graphics);
         
-        // 创建下一个方块预览节点
+        // 创建下一个方块预览节点 - 放在右侧
         const nextPieceNode = new Node('NextPiece');
         this.node.addChild(nextPieceNode);
         nextPieceNode.layer = Layers.Enum.UI_2D;
-        nextPieceNode.setPosition(new Vec3(200, 150, 0));
+        nextPieceNode.setPosition(new Vec3(280, 220, 0));  // 调整位置
         const nextTransform = nextPieceNode.addComponent(UITransform);
-        nextTransform.setContentSize(120, 120);
+        nextTransform.setContentSize(150, 150);
         nextPieceNode.addComponent(Graphics);
         
-        // 创建 UI 标签
-        const scoreLabel = this.createLabel('ScoreLabel', 'Score: 0', new Vec3(200, 80, 0), 24);
-        const levelLabel = this.createLabel('LevelLabel', 'Level: 1', new Vec3(200, 40, 0), 24);
-        const linesLabel = this.createLabel('LinesLabel', 'Lines: 0', new Vec3(200, 0, 0), 24);
-        const comboLabel = this.createLabel('ComboLabel', '', new Vec3(200, -40, 0), 20, true);
+        // 创建 UI 标签 - 放在更右侧
+        const scoreLabel = this.createLabel('ScoreLabel', 'Score: 0', new Vec3(280, 80, 0), 28);
+        const levelLabel = this.createLabel('LevelLabel', 'Level: 1', new Vec3(280, 40, 0), 28);
+        const linesLabel = this.createLabel('LinesLabel', 'Lines: 0', new Vec3(280, 0, 0), 28);
+        const comboLabel = this.createLabel('ComboLabel', '', new Vec3(280, -50, 0), 24, true);
         
+        // 菜单文字放在右侧，避免与游戏画板重叠
         const menuLabel = this.createLabel('MenuLabel', 
             'ATETRIS\n\nPress any key to start\n\nControls:\n← → : Move\n↓ : Soft Drop\n↑ / X : Rotate CW\nZ : Rotate CCW\nSpace : Hard Drop\nP / Esc : Pause\nR : Restart', 
-            new Vec3(0, 0, 0), 20);
+            new Vec3(280, 50, 0), 22);  // 移到右侧
         menuLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         menuLabel.verticalAlign = Label.VerticalAlign.CENTER;
         
+        // 暂停和游戏结束标签放在右侧下方，避免与计分板重叠
         const pauseLabel = this.createLabel('PauseLabel', 
             'PAUSED\n\nPress P or Esc to resume', 
-            new Vec3(0, 0, 0), 32, true);
+            new Vec3(280, -150, 0), 32, true);  // 移到下方
         pauseLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         pauseLabel.verticalAlign = Label.VerticalAlign.CENTER;
         pauseLabel.node.active = false;
         
         const gameOverLabel = this.createLabel('GameOverLabel', 
-            'GAME OVER', 
-            new Vec3(0, 0, 0), 32, true);
+            'GAME OVER\n\nPress Space or R to restart', 
+            new Vec3(280, -150, 0), 28, true);  // 移到下方，添加空格键提示
         gameOverLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         gameOverLabel.verticalAlign = Label.VerticalAlign.CENTER;
         gameOverLabel.node.active = false;
@@ -69,18 +72,24 @@ export class GameBootstrap extends Component {
         const gameManagerNode = new Node('GameManager');
         this.node.addChild(gameManagerNode);
         
+        // 添加组件但不立即初始化
         const gameMain = gameManagerNode.addComponent(GameMain);
         
-        // 绑定引用
-        gameMain.gameBoardNode = gameBoardNode;
-        gameMain.nextPieceNode = nextPieceNode;
-        gameMain.scoreLabel = scoreLabel;
-        gameMain.levelLabel = levelLabel;
-        gameMain.linesLabel = linesLabel;
-        gameMain.comboLabel = comboLabel;
-        gameMain.gameOverLabel = gameOverLabel;
-        gameMain.pauseLabel = pauseLabel;
-        gameMain.menuLabel = menuLabel;
+        // 延迟一帧设置引用，确保 onLoad 之后执行
+        setTimeout(() => {
+            gameMain.gameBoardNode = gameBoardNode;
+            gameMain.nextPieceNode = nextPieceNode;
+            gameMain.scoreLabel = scoreLabel;
+            gameMain.levelLabel = levelLabel;
+            gameMain.linesLabel = linesLabel;
+            gameMain.comboLabel = comboLabel;
+            gameMain.gameOverLabel = gameOverLabel;
+            gameMain.pauseLabel = pauseLabel;
+            gameMain.menuLabel = menuLabel;
+            
+            // 手动调用初始化
+            gameMain.init();
+        }, 0);
     }
     
     private createLabel(name: string, text: string, position: Vec3, fontSize: number = 24, bold: boolean = false): Label {

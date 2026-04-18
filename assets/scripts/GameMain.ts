@@ -42,10 +42,10 @@ export class GameMain extends Component {
     @property(Label)
     public menuLabel: Label | null = null;
 
-    // Game constants
-    public static readonly CELL_SIZE: number = 28;
-    public static readonly BOARD_OFFSET_X: number = -200;
-    public static readonly BOARD_OFFSET_Y: number = -280;
+    // Game constants - 相对于 GameBoard 节点的本地坐标
+    public static readonly CELL_SIZE: number = 32;  // 增大格子尺寸
+    public static readonly BOARD_OFFSET_X: number = -160;  // 10 * 32 / 2 = 160，向左移动避免遮挡文字
+    public static readonly BOARD_OFFSET_Y: number = -320;  // 20 * 32 / 2 = 320
 
     // Game components
     private _grid: Grid = new Grid();
@@ -63,6 +63,11 @@ export class GameMain extends Component {
     private _nextPieceGraphics: Graphics | null = null;
 
     onLoad(): void {
+        // 延迟初始化，等待 GameBootstrap 设置节点引用
+        // 实际初始化在 init() 方法中
+    }
+    
+    public init(): void {
         this.setupGraphics();
         this.setupInput();
         this.setupScoreCallbacks();
@@ -97,7 +102,12 @@ export class GameMain extends Component {
             this._boardGraphics = this.gameBoardNode.getComponent(Graphics);
             if (!this._boardGraphics) {
                 this._boardGraphics = this.gameBoardNode.addComponent(Graphics);
+                console.log('Graphics component added to GameBoard');
+            } else {
+                console.log('Graphics component found on GameBoard');
             }
+        } else {
+            console.error('GameBoard node not assigned!');
         }
 
         if (this.nextPieceNode) {
@@ -171,9 +181,11 @@ export class GameMain extends Component {
     }
 
     private restartGame(): void {
+        // 游戏结束或暂停状态下可以重新开始
         if (this._state === GameState.GAME_OVER || this._state === GameState.PAUSED) {
             this.startGame();
         }
+        // 游戏中空格键是硬降，由 hardDrop 处理
     }
 
     private togglePause(): void {
@@ -278,6 +290,12 @@ export class GameMain extends Component {
     }
 
     private hardDrop(): void {
+        // 游戏结束或暂停状态下，空格键用于重新开始
+        if (this._state === GameState.GAME_OVER || this._state === GameState.PAUSED) {
+            this.restartGame();
+            return;
+        }
+        
         if (!this._currentPiece || this._state !== GameState.PLAYING) return;
 
         let dropDistance = 0;
@@ -330,75 +348,74 @@ export class GameMain extends Component {
     }
 
     private renderBoard(): void {
-        if (!this._boardGraphics) return;
+        if (!this._boardGraphics) {
+            console.warn('Board graphics not initialized');
+            return;
+        }
 
         const g = this._boardGraphics;
         g.clear();
 
-        // Draw grid background - lighter color for better contrast
-        g.fillColor = new Color(240, 240, 240, 255); // Light gray/white background
-        g.rect(
-            GameMain.BOARD_OFFSET_X,
-            GameMain.BOARD_OFFSET_Y,
-            Grid.WIDTH * GameMain.CELL_SIZE,
-            Grid.HEIGHT * GameMain.CELL_SIZE
-        );
-        g.fill();
+        const boardWidth = Grid.WIDTH * GameMain.CELL_SIZE;
+        const boardHeight = Grid.HEIGHT * GameMain.CELL_SIZE;
+        const left = GameMain.BOARD_OFFSET_X;
+        const bottom = GameMain.BOARD_OFFSET_Y;
 
-        // Draw grid lines - darker for visibility
-        g.strokeColor = new Color(150, 150, 150, 255);
+        // Draw grid background
+        g.fillColor = new Color(245, 245, 245, 255);
+        g.fillRect(left, bottom, boardWidth, boardHeight);
+
+        // Draw grid cells
+        g.fillColor = new Color(230, 230, 230, 255);
+        for (let row = 0; row < Grid.HEIGHT; row++) {
+            for (let col = 0; col < Grid.WIDTH; col++) {
+                if ((row + col) % 2 === 0) {
+                    const px = left + col * GameMain.CELL_SIZE;
+                    const py = bottom + row * GameMain.CELL_SIZE;
+                    g.fillRect(px, py, GameMain.CELL_SIZE, GameMain.CELL_SIZE);
+                }
+            }
+        }
+
+        // Draw grid lines
+        g.strokeColor = new Color(180, 180, 180, 255);
         g.lineWidth = 1;
-        
         for (let x = 0; x <= Grid.WIDTH; x++) {
-            const px = GameMain.BOARD_OFFSET_X + x * GameMain.CELL_SIZE;
-            g.moveTo(px, GameMain.BOARD_OFFSET_Y);
-            g.lineTo(px, GameMain.BOARD_OFFSET_Y + Grid.HEIGHT * GameMain.CELL_SIZE);
+            const px = left + x * GameMain.CELL_SIZE;
+            g.moveTo(px, bottom);
+            g.lineTo(px, bottom + boardHeight);
         }
-        
         for (let y = 0; y <= Grid.HEIGHT; y++) {
-            const py = GameMain.BOARD_OFFSET_Y + y * GameMain.CELL_SIZE;
-            g.moveTo(GameMain.BOARD_OFFSET_X, py);
-            g.lineTo(GameMain.BOARD_OFFSET_X + Grid.WIDTH * GameMain.CELL_SIZE, py);
+            const py = bottom + y * GameMain.CELL_SIZE;
+            g.moveTo(left, py);
+            g.lineTo(left + boardWidth, py);
         }
         g.stroke();
-        
-        // Draw border around the game board
-        g.strokeColor = new Color(80, 80, 80, 255);
+
+        // Draw border
+        g.strokeColor = new Color(60, 60, 60, 255);
         g.lineWidth = 3;
-        g.rect(
-            GameMain.BOARD_OFFSET_X,
-            GameMain.BOARD_OFFSET_Y,
-            Grid.WIDTH * GameMain.CELL_SIZE,
-            Grid.HEIGHT * GameMain.CELL_SIZE
-        );
+        g.moveTo(left, bottom);
+        g.lineTo(left + boardWidth, bottom);
+        g.lineTo(left + boardWidth, bottom + boardHeight);
+        g.lineTo(left, bottom + boardHeight);
+        g.lineTo(left, bottom);
         g.stroke();
 
-        // Only draw game pieces when playing or paused (not in menu)
-        if (this._state !== GameState.MENU) {
-            // Draw locked pieces
-            const filledCells = this._grid.getFilledCells();
-            for (const cell of filledCells) {
-                this.drawCell(g, cell.x, cell.y, cell.color);
-            }
+        // Draw pieces (skip in menu)
+        if (this._state === GameState.MENU) return;
 
-            // Draw ghost piece
-            if (this._currentPiece && this._state === GameState.PLAYING) {
-                const ghostY = this._grid.getGhostPiecePosition(this._currentPiece);
-                const ghostPositions = this._currentPiece.getBlockPositions();
-                const ghostColor = this._currentPiece.color.clone();
-                ghostColor.a = 60;
-                
-                for (const pos of ghostPositions) {
-                    this.drawCell(g, pos.x, ghostY + (pos.y - this._currentPiece.y), ghostColor);
-                }
-            }
+        // Locked pieces
+        const filledCells = this._grid.getFilledCells();
+        for (const cell of filledCells) {
+            this.drawCell(g, cell.x, cell.y, cell.color);
+        }
 
-            // Draw current piece
-            if (this._currentPiece && this._state === GameState.PLAYING) {
-                const positions = this._currentPiece.getBlockPositions();
-                for (const pos of positions) {
-                    this.drawCell(g, pos.x, pos.y, this._currentPiece.color);
-                }
+        // Current piece (ghost piece removed - players judge by eye)
+        if (this._currentPiece && this._state === GameState.PLAYING) {
+            const positions = this._currentPiece.getBlockPositions();
+            for (const pos of positions) {
+                this.drawCell(g, pos.x, pos.y, this._currentPiece.color);
             }
         }
     }
@@ -442,34 +459,22 @@ export class GameMain extends Component {
     }
 
     private drawCell(g: Graphics, gridX: number, gridY: number, color: Color): void {
-        const px = GameMain.BOARD_OFFSET_X + gridX * GameMain.CELL_SIZE + 1;
-        const py = GameMain.BOARD_OFFSET_Y + gridY * GameMain.CELL_SIZE + 1;
-        const size = GameMain.CELL_SIZE - 2;
+        const px = GameMain.BOARD_OFFSET_X + gridX * GameMain.CELL_SIZE + 2;
+        const py = GameMain.BOARD_OFFSET_Y + gridY * GameMain.CELL_SIZE + 2;
+        const size = GameMain.CELL_SIZE - 4;
         
         // Fill the cell
         g.fillColor = color;
-        g.rect(px, py, size, size);
-        g.fill();
+        g.fillRect(px, py, size, size);
         
-        // Draw dark border for 3D effect
-        g.strokeColor = new Color(0, 0, 0, 100);
+        // Draw border
+        g.strokeColor = new Color(0, 0, 0, 150);
         g.lineWidth = 1;
-        g.rect(px, py, size, size);
-        g.stroke();
-        
-        // Draw inner highlight (top-left)
-        g.strokeColor = new Color(255, 255, 255, 120);
-        g.lineWidth = 1;
-        g.moveTo(px, py + size);
-        g.lineTo(px, py);
+        g.moveTo(px, py);
         g.lineTo(px + size, py);
-        g.stroke();
-        
-        // Draw inner shadow (bottom-right)
-        g.strokeColor = new Color(0, 0, 0, 80);
-        g.moveTo(px + size, py);
         g.lineTo(px + size, py + size);
         g.lineTo(px, py + size);
+        g.lineTo(px, py);
         g.stroke();
     }
 }
