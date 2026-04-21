@@ -1,0 +1,15 @@
+当前项目是一个在Windows平台基于Cocos 3.8.7版本开发的H5俄罗斯方块小游戏。今天在macOS环境下打开并升级到3.8.8版本之后，游戏无法正常启动了，启动后会全部黑屏控制台也没有报错。诊断一下看看可能问题在哪里
+
+---
+
+我启用了Chrome dev tools MCP工具，请借助它来诊断分析一下
+
+---
+
+[Terminal 241cbceb-e729-46dc-99cb-7b35a84a6b22 notification: command completed with exit code 0. Use send_to_terminal to send another command or kill_terminal to stop it.]
+Terminal output:
+  ~/Projects/WEABLE/atetris   main !4 ?3                          15:50:01
+❯  lsof -i -P | grep LISTEN | grep -E '7456|7457|8080|3000|7000|7001'
+ControlCe   743 Larry   10u  IPv4 0xda44b10abced1699      0t0    TCP *:7000 (LISTEN)
+ControlCe   743 Larry   11u  IPv6 0x526dabb3070a0a70      0t0    TCP *:7000 (LISTEN)
+CocosCrea 52950 Larry   65u  IPv6 0x947145a92f9d0b8d      0t0    TCP *:7456 (LISTEN)
