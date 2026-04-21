@@ -1,0 +1,14 @@
+.gitignore
+  h_0d098b1c016293 25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "da88d1363bdd2be22f88fa40989dc43a4802fea8",
+  "prompts": {},
+  "humans": {
+    "h_0d098b1c016293": {
+      "author": "larry"
+    }
+  }
+}
