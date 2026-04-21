@@ -6,6 +6,7 @@ const { ccclass } = _decorator;
 export interface Cell {
     filled: boolean;
     color: Color | null;
+    pieceType: number;  // TetrominoType，空格子为 -1
 }
 
 @ccclass('Grid')
@@ -28,7 +29,8 @@ export class Grid {
             for (let x = 0; x < Grid.WIDTH; x++) {
                 this._cells[y][x] = {
                     filled: false,
-                    color: null
+                    color: null,
+                    pieceType: -1
                 };
             }
         }
@@ -100,11 +102,13 @@ export class Grid {
         const positions = piece.getBlockPositions();
         const color = piece.color;
         
+        const pieceType = piece.type;
         for (const pos of positions) {
             if (this.isValidPosition(pos.x, pos.y)) {
                 this._cells[pos.y][pos.x] = {
                     filled: true,
-                    color: color
+                    color: color,
+                    pieceType: pieceType
                 };
             }
         }
@@ -144,7 +148,8 @@ export class Grid {
             for (let x = 0; x < Grid.WIDTH; x++) {
                 this._cells[y][x] = {
                     filled: this._cells[y + 1][x].filled,
-                    color: this._cells[y + 1][x].color ? this._cells[y + 1][x].color!.clone() : null
+                    color: this._cells[y + 1][x].color ? this._cells[y + 1][x].color!.clone() : null,
+                    pieceType: this._cells[y + 1][x].pieceType
                 };
             }
         }
@@ -153,7 +158,8 @@ export class Grid {
         for (let x = 0; x < Grid.WIDTH; x++) {
             this._cells[Grid.HEIGHT - 1][x] = {
                 filled: false,
-                color: null
+                color: null,
+                pieceType: -1
             };
         }
     }
@@ -184,8 +190,8 @@ export class Grid {
         return this._cells;
     }
 
-    public getFilledCells(): { x: number, y: number, color: Color }[] {
-        const filled: { x: number, y: number, color: Color }[] = [];
+    public getFilledCells(): { x: number, y: number, color: Color, pieceType: number }[] {
+        const filled: { x: number, y: number, color: Color, pieceType: number }[] = [];
         
         for (let y = 0; y < Grid.HEIGHT; y++) {
             for (let x = 0; x < Grid.WIDTH; x++) {
@@ -193,7 +199,8 @@ export class Grid {
                     filled.push({
                         x: x,
                         y: y,
-                        color: this._cells[y][x].color!
+                        color: this._cells[y][x].color!,
+                        pieceType: this._cells[y][x].pieceType
                     });
                 }
             }

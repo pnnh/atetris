@@ -1,8 +1,9 @@
-import { _decorator, Component, Node, Graphics, Color, Vec3, Label, input, Input, EventKeyboard, KeyCode } from 'cc';
+import { _decorator, Component, Node, Graphics, Color, Vec3, Label, input, Input, EventKeyboard, KeyCode, UITransform } from 'cc';
 import { Grid } from './Grid';
 import { Tetromino, TetrominoType } from './Tetromino';
 import { InputHandler, GameAction } from './InputHandler';
 import { ScoreManager } from './ScoreManager';
+import { BlockRenderer } from './BlockRenderer';
 
 const { ccclass, property } = _decorator;
 
@@ -58,17 +59,32 @@ export class GameMain extends Component {
     private _nextPieceType: TetrominoType = TetrominoType.I;
     private _fallTimer: number = 0;
 
-    // Graphics
+    // Graphics（仅用于绘制网格背景和边框）
     private _boardGraphics: Graphics | null = null;
     private _nextPieceGraphics: Graphics | null = null;
 
+    // 精灵渲染器（绘制方块像素艺术）
+    private _blockRenderer: BlockRenderer | null = null;
+
     onLoad(): void {
         // 延迟初始化，等待 GameBootstrap 设置节点引用
-        // 实际初始化在 init() 方法中
+        // 实际初始化在 initAsync() 方法中
     }
-    
-    public init(): void {
+
+    /** 旧同步入口保留兼容性，实际已不使用 */
+    public init(): void { /* no-op */ }
+
+    /** 异步初始化：加载像素艺术纹理后再启动游戏 */
+    public async initAsync(): Promise<void> {
         this.setupGraphics();
+        this._blockRenderer = new BlockRenderer(
+            this.gameBoardNode!,
+            this.nextPieceNode!,
+            GameMain.CELL_SIZE,
+            GameMain.BOARD_OFFSET_X,
+            GameMain.BOARD_OFFSET_Y,
+        );
+        await this._blockRenderer.init();
         this.setupInput();
         this.setupScoreCallbacks();
         this.showMenu();
@@ -91,30 +107,39 @@ export class GameMain extends Component {
                 this.render();
                 break;
             case GameState.PAUSED:
+                // 暂停时继续显示当前画面（精灵节点保持原状，仅刷新背景）
+                this._renderBoardBackground();
+                break;
             case GameState.MENU:
-                // Render once to show static content
+                // do nothing - showMenu() 已经渲染过一次背景
                 break;
         }
     }
 
     private setupGraphics(): void {
         if (this.gameBoardNode) {
-            this._boardGraphics = this.gameBoardNode.getComponent(Graphics);
-            if (!this._boardGraphics) {
-                this._boardGraphics = this.gameBoardNode.addComponent(Graphics);
-                console.log('Graphics component added to GameBoard');
-            } else {
-                console.log('Graphics component found on GameBoard');
+            // 背景节点必须是第一个子节点（sibling index 0），确保在精灵节点之前渲染
+            let boardBgNode = this.gameBoardNode.getChildByName('BoardBg');
+            if (!boardBgNode) {
+                boardBgNode = new Node('BoardBg');
+                boardBgNode.addComponent(UITransform);
+                this.gameBoardNode.addChild(boardBgNode);
+                boardBgNode.setSiblingIndex(0);
             }
+            this._boardGraphics = boardBgNode.getComponent(Graphics) ?? boardBgNode.addComponent(Graphics);
         } else {
             console.error('GameBoard node not assigned!');
         }
 
         if (this.nextPieceNode) {
-            this._nextPieceGraphics = this.nextPieceNode.getComponent(Graphics);
-            if (!this._nextPieceGraphics) {
-                this._nextPieceGraphics = this.nextPieceNode.addComponent(Graphics);
+            let nextBgNode = this.nextPieceNode.getChildByName('NextBg');
+            if (!nextBgNode) {
+                nextBgNode = new Node('NextBg');
+                nextBgNode.addComponent(UITransform);
+                this.nextPieceNode.addChild(nextBgNode);
+                nextBgNode.setSiblingIndex(0);
             }
+            this._nextPieceGraphics = nextBgNode.getComponent(Graphics) ?? nextBgNode.addComponent(Graphics);
         }
     }
 
@@ -230,7 +255,8 @@ export class GameMain extends Component {
         }
         
         this._fallTimer = 0;
-        this.renderNextPiece();
+        // 更新预览区精灵
+        this._blockRenderer?.updateNextPiece(this._nextPieceType);
     }
 
     private updateGameplay(deltaTime: number): void {
@@ -341,18 +367,32 @@ export class GameMain extends Component {
     }
 
     private render(): void {
-        this.renderBoard();
-        if (this._state !== GameState.MENU) {
-            this.renderNextPiece();
+        this.renderBackground();
+        if (this._blockRenderer) {
+            if (this._state === GameState.MENU) {
+                this._blockRenderer.clearBoard();
+                this._blockRenderer.clearNextPiece();
+            } else {
+                this._blockRenderer.updateBoard(
+                    this._grid,
+                    this._currentPiece,
+                    this._state === GameState.PLAYING,
+                );
+                this._blockRenderer.updateNextPiece(this._nextPieceType);
+            }
         }
     }
 
-    private renderBoard(): void {
-        if (!this._boardGraphics) {
-            console.warn('Board graphics not initialized');
-            return;
+    /** 仅绘制背景网格和预览框（不含方块，方块由 BlockRenderer 精灵处理） */
+    private renderBackground(): void {
+        this._renderBoardBackground();
+        if (this._state !== GameState.MENU) {
+            this._renderNextPieceBackground();
         }
+    }
 
+    private _renderBoardBackground(): void {
+        if (!this._boardGraphics) return;
         const g = this._boardGraphics;
         g.clear();
 
@@ -361,39 +401,36 @@ export class GameMain extends Component {
         const left = GameMain.BOARD_OFFSET_X;
         const bottom = GameMain.BOARD_OFFSET_Y;
 
-        // Draw grid background
-        g.fillColor = new Color(245, 245, 245, 255);
+        // 背景底色
+        g.fillColor = new Color(20, 20, 35, 255);
         g.fillRect(left, bottom, boardWidth, boardHeight);
 
-        // Draw grid cells
-        g.fillColor = new Color(230, 230, 230, 255);
+        // 棋盘格交替底色
+        g.fillColor = new Color(25, 25, 42, 255);
         for (let row = 0; row < Grid.HEIGHT; row++) {
             for (let col = 0; col < Grid.WIDTH; col++) {
                 if ((row + col) % 2 === 0) {
-                    const px = left + col * GameMain.CELL_SIZE;
-                    const py = bottom + row * GameMain.CELL_SIZE;
-                    g.fillRect(px, py, GameMain.CELL_SIZE, GameMain.CELL_SIZE);
+                    g.fillRect(left + col * GameMain.CELL_SIZE, bottom + row * GameMain.CELL_SIZE,
+                               GameMain.CELL_SIZE, GameMain.CELL_SIZE);
                 }
             }
         }
 
-        // Draw grid lines
-        g.strokeColor = new Color(180, 180, 180, 255);
+        // 网格线
+        g.strokeColor = new Color(40, 40, 60, 255);
         g.lineWidth = 1;
         for (let x = 0; x <= Grid.WIDTH; x++) {
             const px = left + x * GameMain.CELL_SIZE;
-            g.moveTo(px, bottom);
-            g.lineTo(px, bottom + boardHeight);
+            g.moveTo(px, bottom); g.lineTo(px, bottom + boardHeight);
         }
         for (let y = 0; y <= Grid.HEIGHT; y++) {
             const py = bottom + y * GameMain.CELL_SIZE;
-            g.moveTo(left, py);
-            g.lineTo(left + boardWidth, py);
+            g.moveTo(left, py); g.lineTo(left + boardWidth, py);
         }
         g.stroke();
 
-        // Draw border
-        g.strokeColor = new Color(60, 60, 60, 255);
+        // 外边框
+        g.strokeColor = new Color(100, 100, 160, 255);
         g.lineWidth = 3;
         g.moveTo(left, bottom);
         g.lineTo(left + boardWidth, bottom);
@@ -401,80 +438,18 @@ export class GameMain extends Component {
         g.lineTo(left, bottom + boardHeight);
         g.lineTo(left, bottom);
         g.stroke();
-
-        // Draw pieces (skip in menu)
-        if (this._state === GameState.MENU) return;
-
-        // Locked pieces
-        const filledCells = this._grid.getFilledCells();
-        for (const cell of filledCells) {
-            this.drawCell(g, cell.x, cell.y, cell.color);
-        }
-
-        // Current piece (ghost piece removed - players judge by eye)
-        if (this._currentPiece && this._state === GameState.PLAYING) {
-            const positions = this._currentPiece.getBlockPositions();
-            for (const pos of positions) {
-                this.drawCell(g, pos.x, pos.y, this._currentPiece.color);
-            }
-        }
     }
 
-    private renderNextPiece(): void {
+    private _renderNextPieceBackground(): void {
         if (!this._nextPieceGraphics) return;
-
         const g = this._nextPieceGraphics;
         g.clear();
-
-        // Draw background
-        g.fillColor = new Color(30, 30, 30, 255);
+        g.fillColor = new Color(20, 20, 35, 255);
         g.rect(-60, -60, 120, 120);
         g.fill();
-
-        // Draw next piece preview
-        const nextPiece = new Tetromino(this._nextPieceType);
-        const shape = nextPiece.getCurrentShape();
-        const color = nextPiece.color;
-        
-        const offsetX = -shape[0].length * GameMain.CELL_SIZE / 2;
-        const offsetY = -shape.length * GameMain.CELL_SIZE / 2;
-        
-        for (let row = 0; row < shape.length; row++) {
-            for (let col = 0; col < shape[row].length; col++) {
-                if (shape[row][col] === 1) {
-                    const px = offsetX + col * GameMain.CELL_SIZE;
-                    const py = offsetY + (shape.length - 1 - row) * GameMain.CELL_SIZE;
-                    
-                    g.fillColor = color;
-                    g.rect(px, py, GameMain.CELL_SIZE - 2, GameMain.CELL_SIZE - 2);
-                    g.fill();
-                    
-                    g.strokeColor = new Color(255, 255, 255, 100);
-                    g.lineWidth = 1;
-                    g.rect(px, py, GameMain.CELL_SIZE - 2, GameMain.CELL_SIZE - 2);
-                    g.stroke();
-                }
-            }
-        }
-    }
-
-    private drawCell(g: Graphics, gridX: number, gridY: number, color: Color): void {
-        const px = GameMain.BOARD_OFFSET_X + gridX * GameMain.CELL_SIZE + 2;
-        const py = GameMain.BOARD_OFFSET_Y + gridY * GameMain.CELL_SIZE + 2;
-        const size = GameMain.CELL_SIZE - 4;
-        
-        // Fill the cell
-        g.fillColor = color;
-        g.fillRect(px, py, size, size);
-        
-        // Draw border
-        g.strokeColor = new Color(0, 0, 0, 150);
-        g.lineWidth = 1;
-        g.moveTo(px, py);
-        g.lineTo(px + size, py);
-        g.lineTo(px + size, py + size);
-        g.lineTo(px, py + size);
-        g.lineTo(px, py);
+        g.strokeColor = new Color(100, 100, 160, 255);
+        g.lineWidth = 2;
+        g.rect(-60, -60, 120, 120);
         g.stroke();
     }
 }

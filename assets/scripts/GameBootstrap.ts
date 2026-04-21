@@ -75,8 +75,8 @@ export class GameBootstrap extends Component {
         // 添加组件但不立即初始化
         const gameMain = gameManagerNode.addComponent(GameMain);
         
-        // 延迟一帧设置引用，确保 onLoad 之后执行
-        setTimeout(() => {
+        // 延迟一帧设置引用，确保 onLoad 之后执行（使用引擎调度器而非 setTimeout）
+        this.scheduleOnce(() => {
             gameMain.gameBoardNode = gameBoardNode;
             gameMain.nextPieceNode = nextPieceNode;
             gameMain.scoreLabel = scoreLabel;
@@ -87,8 +87,8 @@ export class GameBootstrap extends Component {
             gameMain.pauseLabel = pauseLabel;
             gameMain.menuLabel = menuLabel;
             
-            // 手动调用初始化
-            gameMain.init();
+            // 异步初始化（加载像素艺术纹理后再启动游戏）
+            gameMain.initAsync().catch(err => console.error('[GameMain] initAsync failed:', err));
         }, 0);
     }
     
